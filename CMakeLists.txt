@@ -5,6 +5,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs 
   message_generation
+  laser_geometry
 )
 
 ##Generate added messages and services with any dependencies listed here
