@@ -13,6 +13,8 @@ It then proceeds to publish the calculated velocity on `cmd_vel` of type `geomet
 * from your workspacke build with `catkin_make`
 * run with `rosrun labiagi_proj collision_avoidance`
 
+# Test this node
+
 The simplest way to test this node is by using stage ros and a controller node that publishes `Twist` messages such as `teleop_twist_keyboard`.
 
 Install the controller using:
