@@ -37,7 +37,7 @@ rosrun stage_ros stageros <worldfile>
 ```
 >Note: [cappero_laser_odom_diag_obstacle_2020-05-06-16-26-03.world](https://gitlab.com//grisetti/labiagi_2020_21/-/raw/master/workspaces/srrg2_labiagi/src/srrg2_navigation_2d/config/cappero_laser_odom_diag_obstacle_2020-05-06-16-26-03.world?inline=false) was used for testing
 
-Make sure the controller terminal is selected. Now you can mode using:
+Make sure the controller terminal is selected. Now you can move using:
 * `j` turn left
 * `i` move forward
 * `l` turn right

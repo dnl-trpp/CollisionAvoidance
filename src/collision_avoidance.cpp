@@ -9,7 +9,10 @@
 #include <Eigen/StdVector>
 #include <Eigen/Geometry>
 #include <cmath>
+#include <stdlib.h>
 
+#define MIN_DETECTION_ANGLE -0.436332
+#define MAX_DETECTION_ANGLE 0.436332
 
 ros::Publisher cmd_vel_pub;
 bool commandReceived;
@@ -44,8 +47,21 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     return;
   }
 
-  auto obstaclePosition = cloud.points[540];
-  float obstacleDistance = sqrt(obstaclePosition.x*obstaclePosition.x+obstaclePosition.y*obstaclePosition.y); //msg->ranges[540];
+  int min_detection_point= std::abs(msg->angle_min - (MIN_DETECTION_ANGLE)) / msg->angle_increment;
+  int max_detection_point= msg->ranges.size() - std::abs(msg->angle_max - (MAX_DETECTION_ANGLE)) / msg->angle_increment;
+  ROS_INFO("min detection: %d", min_detection_point);
+  ROS_INFO("max detecetio: %d", max_detection_point);
+
+  auto obstaclePosition = cloud.points[min_detection_point];
+  float obstacleDistance = msg->ranges[min_detection_point];
+  for(int i = min_detection_point;i<max_detection_point;i++){
+    if(msg->ranges[i]<obstacleDistance){
+      obstaclePosition = cloud.points[i];
+      obstacleDistance = msg->ranges[i];
+    }
+
+  }
+
   ROS_INFO("Obstacle Position(In base_link frame): (%f,%f)",obstaclePosition.x,obstaclePosition.y);
   ROS_INFO("Obstacle Distance: %f",obstacleDistance);
 
