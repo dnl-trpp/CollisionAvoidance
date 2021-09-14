@@ -7,7 +7,17 @@ It reads from two topics:
 Given a  velocity as input, this node uses the laser scan to locate obstacles and adjust the velocity accordingly.
 It then proceeds to publish the calculated velocity on `cmd_vel` of type `geometry_msgs/Twist`
 
-![slow_speed](Slow_speed.mp4)
+* Slow speed:
+
+![slow_speed](slow_speed.gif)
+
+* Fast speed:
+
+![fast_speed](fast_speed.gif)
+
+ * Turning:
+
+![turn](turn.gif)
 
 # How to run 
 
