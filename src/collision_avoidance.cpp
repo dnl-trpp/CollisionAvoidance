@@ -11,8 +11,8 @@
 #include <cmath>
 #include <stdlib.h>
 
-#define MIN_DETECTION_ANGLE -0.436332
-#define MAX_DETECTION_ANGLE 0.436332
+const float DEFAULT_MIN_DETECTION_ANGLE = -0.436332;
+const float DEFAULT_MAX_DETECTION_ANGLE = 0.436332;
 
 ros::Publisher cmd_vel_pub;
 bool commandReceived;
@@ -36,8 +36,9 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   laser_geometry::LaserProjection projector;
   sensor_msgs::PointCloud cloud;
 
-  ROS_INFO("Ranges size: %lu",msg->ranges.size());
-  ROS_INFO("Calculation point cloud");
+  //ROS_INFO("Ranges size: %lu",msg->ranges.size());
+  //ROS_INFO("Calculation point cloud");
+  
   try{
     listener->waitForTransform("/base_link", msg->header.frame_id.c_str(), ros::Time(0), ros::Duration(1.0));
     projector.transformLaserScanToPointCloud("/base_link", *msg, cloud, *listener);
@@ -47,10 +48,16 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     return;
   }
 
-  int min_detection_point= std::abs(msg->angle_min - (MIN_DETECTION_ANGLE)) / msg->angle_increment;
-  int max_detection_point= msg->ranges.size() - std::abs(msg->angle_max - (MAX_DETECTION_ANGLE)) / msg->angle_increment;
-  ROS_INFO("min detection: %d", min_detection_point);
-  ROS_INFO("max detecetio: %d", max_detection_point);
+  float min_detection_angle;
+  float max_detection_angle;
+  ros::param::param<float>("min_detection_angle", min_detection_angle, DEFAULT_MIN_DETECTION_ANGLE);
+  ros::param::param<float>("max_detection_angle", max_detection_angle, DEFAULT_MAX_DETECTION_ANGLE);
+
+  int min_detection_point= std::abs(msg->angle_min - min_detection_angle) / msg->angle_increment;
+  int max_detection_point= msg->ranges.size() - std::abs(msg->angle_max - max_detection_angle) / msg->angle_increment;
+  
+  //ROS_INFO("min detection: %d", min_detection_point);
+  //ROS_INFO("max detecetio: %d", max_detection_point);
 
   auto obstaclePosition = cloud.points[min_detection_point];
   float obstacleDistance = msg->ranges[min_detection_point];
@@ -68,13 +75,12 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   float currentspeed=sqrt(latestCommand.linear.y*latestCommand.linear.y+latestCommand.linear.x*latestCommand.linear.x);
   float clampedspeed= (currentspeed<5.0)  ? currentspeed : 5.0;
 
-  ROS_INFO("Clamped speed: %f ", clampedspeed);
   if(obstacleDistance < clampedspeed ){
-    ROS_INFO("Obstacle in proximity detected!");
+    ROS_WARN("Obstacle in proximity detected!");
     float forceIntensity= (1.0 / obstacleDistance)*0.3* clampedspeed;
     float forceX = -(obstaclePosition.x / obstacleDistance) * forceIntensity;
     float forceY = -(obstaclePosition.y / obstacleDistance) * forceIntensity;
-    ROS_INFO("Repulsing force: (%f,%f)",forceX,forceY);
+    ROS_WARN("Applying Repulsive force: (%f,%f)",forceX,forceY);
     geometry_msgs::Twist cmd_vel;
     cmd_vel.linear.x = latestCommand.linear.x+forceX;
     if (signbit(cmd_vel.linear.x)!= signbit(latestCommand.linear.x)) cmd_vel.linear.x = 0;
