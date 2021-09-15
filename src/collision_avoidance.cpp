@@ -22,23 +22,21 @@ tf::TransformListener* listener;
 void safe_cmd_vel_callback(const geometry_msgs::Twist::ConstPtr& msg)
 
 {
+  //After safe_cmd_vel is received, wait for laser scan
   commandReceived = true;
-  //Copy shared pointer (Object will not be destroyed)
   latestCommand = *msg;
 }
 
 void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
-  if (!commandReceived) return;
+  if (!commandReceived) return; //You need a safe_cmd_vel first
   
   commandReceived = false;
 
   laser_geometry::LaserProjection projector;
   sensor_msgs::PointCloud cloud;
 
-  //ROS_INFO("Ranges size: %lu",msg->ranges.size());
-  //ROS_INFO("Calculation point cloud");
-  
+  //Get laser scan points in /base_link frame  
   try{
     listener->waitForTransform("/base_link", msg->header.frame_id.c_str(), ros::Time(0), ros::Duration(1.0));
     projector.transformLaserScanToPointCloud("/base_link", *msg, cloud, *listener);
@@ -48,17 +46,17 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     return;
   }
 
+  //get Params
   float min_detection_angle;
   float max_detection_angle;
   ros::param::param<float>("min_detection_angle", min_detection_angle, DEFAULT_MIN_DETECTION_ANGLE);
   ros::param::param<float>("max_detection_angle", max_detection_angle, DEFAULT_MAX_DETECTION_ANGLE);
 
+  //Extract points between min_detection_angle and max_detection_angle
   int min_detection_point= std::abs(msg->angle_min - min_detection_angle) / msg->angle_increment;
   int max_detection_point= msg->ranges.size() - std::abs(msg->angle_max - max_detection_angle) / msg->angle_increment;
   
-  //ROS_INFO("min detection: %d", min_detection_point);
-  //ROS_INFO("max detecetio: %d", max_detection_point);
-
+  //Get nearest point (nearest Obastacle) and its distance
   auto obstaclePosition = cloud.points[min_detection_point];
   float obstacleDistance = msg->ranges[min_detection_point];
   for(int i = min_detection_point;i<max_detection_point;i++){
@@ -72,24 +70,29 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   ROS_INFO("Obstacle Position(In base_link frame): (%f,%f)",obstaclePosition.x,obstaclePosition.y);
   ROS_INFO("Obstacle Distance: %f",obstacleDistance);
 
+  //Get speed (used for adjusting force)
   float currentspeed=sqrt(latestCommand.linear.y*latestCommand.linear.y+latestCommand.linear.x*latestCommand.linear.x);
   float clampedspeed= (currentspeed<5.0)  ? currentspeed : 5.0;
 
+  //Apply repulsive force if obstacle is too near
   if(obstacleDistance < clampedspeed ){
     ROS_WARN("Obstacle in proximity detected!");
-    float forceIntensity= (1.0 / obstacleDistance)*0.3* clampedspeed;
+    //Calculating force intensity and direction
+    float forceIntensity= (1.0 / obstacleDistance) *0.3* clampedspeed;
     float forceX = -(obstaclePosition.x / obstacleDistance) * forceIntensity;
     float forceY = -(obstaclePosition.y / obstacleDistance) * forceIntensity;
     ROS_WARN("Applying Repulsive force: (%f,%f)",forceX,forceY);
     geometry_msgs::Twist cmd_vel;
     cmd_vel.linear.x = latestCommand.linear.x+forceX;
+    //Check to avoid a resulting velocity in the opposite direction
+    //We want to slow down, not to go back
     if (signbit(cmd_vel.linear.x)!= signbit(latestCommand.linear.x)) cmd_vel.linear.x = 0;
     cmd_vel.linear.y = latestCommand.linear.y+forceY;
     cmd_vel.linear.z = latestCommand.linear.z;
     cmd_vel.angular  = latestCommand.angular;
     cmd_vel_pub.publish(cmd_vel);
   }
-  else{
+  else{ //If we are safe, publish original velocity
      cmd_vel_pub.publish(latestCommand);
   }
 
@@ -105,8 +108,10 @@ int main(int argc, char **argv)
 
   ros::NodeHandle n;
 
+  //Start listener (used in laser_scan_callback)
   tf::TransformListener lr(ros::Duration(10));
   listener=&lr;
+
   //Subscribe to safe_cmd_vel topic
   ros::Subscriber safe_cmd_vel_sub = n.subscribe("safe_cmd_vel", 1000, safe_cmd_vel_callback);
   //Subscribe to laser scan topic
