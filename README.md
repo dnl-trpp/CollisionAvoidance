@@ -4,20 +4,10 @@ It reads from two topics:
 * `base_scan` of type `sensor_msgs/LaserScan`
 * `safe_cmd_vel` of type `geometry_msgs/Twist`
 
-Given a  velocity as input, this node uses the laser scan to locate obstacles and adjust the velocity accordingly.
+Given a  velocity as input, this node uses the laser scan to locate obstacles and adjust the Twist accordingly.
 It then proceeds to publish the calculated velocity on `cmd_vel` of type `geometry_msgs/Twist`
 
-* Slow speed:
-
-![slow_speed](slow_speed.gif)
-
-* Fast speed:
-
-![fast_speed](fast_speed.gif)
-
- * Turning:
-
-![turn](turn.gif)
+![avoid_collision](avoid_collision.gif)
 
 # How to run 
 

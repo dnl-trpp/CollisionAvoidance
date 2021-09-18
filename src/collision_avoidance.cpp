@@ -11,6 +11,7 @@
 #include <cmath>
 #include <stdlib.h>
 
+#define ANGULAR_DEVIATION 2
 const float DEFAULT_MIN_DETECTION_ANGLE = -0.436332;
 const float DEFAULT_MAX_DETECTION_ANGLE = 0.436332;
 
@@ -51,7 +52,8 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   float max_detection_angle;
   ros::param::param<float>("min_detection_angle", min_detection_angle, DEFAULT_MIN_DETECTION_ANGLE);
   ros::param::param<float>("max_detection_angle", max_detection_angle, DEFAULT_MAX_DETECTION_ANGLE);
-
+  
+  
   //Extract points between min_detection_angle and max_detection_angle
   int min_detection_point= std::abs(msg->angle_min - min_detection_angle) / msg->angle_increment;
   int max_detection_point= msg->ranges.size() - std::abs(msg->angle_max - max_detection_angle) / msg->angle_increment;
@@ -75,7 +77,7 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
   float clampedspeed= (currentspeed<5.0)  ? currentspeed : 5.0;
 
   //Apply repulsive force if obstacle is too near
-  if(obstacleDistance < clampedspeed ){
+  if(obstacleDistance < clampedspeed && latestCommand.linear.x>0){
     ROS_WARN("Obstacle in proximity detected!");
     //Calculating force intensity and direction
     float forceIntensity= (1.0 / obstacleDistance) *0.3* clampedspeed;
@@ -90,6 +92,12 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     cmd_vel.linear.y = latestCommand.linear.y+forceY;
     cmd_vel.linear.z = latestCommand.linear.z;
     cmd_vel.angular  = latestCommand.angular;
+
+    if(obstaclePosition.y>0) cmd_vel.angular.z = -forceIntensity * ANGULAR_DEVIATION;
+    else if(obstaclePosition.y<0) cmd_vel.angular.z =  forceIntensity * ANGULAR_DEVIATION;
+    
+
+  
     cmd_vel_pub.publish(cmd_vel);
   }
   else{ //If we are safe, publish original velocity
