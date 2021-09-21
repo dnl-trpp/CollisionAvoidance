@@ -11,7 +11,7 @@
 #include <cmath>
 #include <stdlib.h>
 
-#define ANGULAR_DEVIATION 2
+#define ANGULAR_DEVIATION 2 
 const float DEFAULT_MIN_DETECTION_ANGLE = -0.436332;
 const float DEFAULT_MAX_DETECTION_ANGLE = 0.436332;
 
@@ -19,6 +19,32 @@ ros::Publisher cmd_vel_pub;
 bool commandReceived;
 geometry_msgs::Twist latestCommand;
 tf::TransformListener* listener;
+
+
+int get_laser_scan_subset(const sensor_msgs::LaserScan laserScan, sensor_msgs::LaserScan& result,float min_angle,float max_angle){
+  //TODO::Add sanity checks on min_angle and max_angle
+
+  //Extract points between min_detection_angle and max_detection_angle
+  int min_detection_point= std::abs(laserScan.angle_min - min_angle) / laserScan.angle_increment;
+  int max_detection_point= laserScan.ranges.size() - std::abs(laserScan.angle_max - max_angle) / laserScan.angle_increment;
+
+  result.header = laserScan.header;
+  result.angle_min = laserScan.angle_min+ laserScan.angle_increment*min_detection_point;
+  result.angle_max = laserScan.angle_min+ laserScan.angle_increment*max_detection_point;;
+  result.angle_increment = laserScan.angle_increment;
+  result.time_increment = laserScan.time_increment;
+  result.scan_time = laserScan.scan_time;
+  result.range_min = laserScan.range_min;
+  result.range_max = laserScan.range_max;
+  for(int i=0;i<max_detection_point-min_detection_point+1;i++){
+    result.ranges.push_back(laserScan.ranges[i+min_detection_point]);
+    result.intensities.push_back(laserScan.intensities[i+min_detection_point]);
+  }
+
+  return 1;
+
+}
+
 
 void safe_cmd_vel_callback(const geometry_msgs::Twist::ConstPtr& msg)
 
@@ -36,35 +62,37 @@ void laser_scan_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
   laser_geometry::LaserProjection projector;
   sensor_msgs::PointCloud cloud;
-
-  //Get laser scan points in /base_link frame  
-  try{
-    listener->waitForTransform("/base_link", msg->header.frame_id.c_str(), ros::Time(0), ros::Duration(1.0));
-    projector.transformLaserScanToPointCloud("/base_link", *msg, cloud, *listener);
-  }
-  catch(tf::TransformException &ex){
-    ROS_ERROR("%s", ex.what());
-    return;
-  }
+  sensor_msgs::LaserScan subset;
 
   //get Params
   float min_detection_angle;
   float max_detection_angle;
   ros::param::param<float>("min_detection_angle", min_detection_angle, DEFAULT_MIN_DETECTION_ANGLE);
   ros::param::param<float>("max_detection_angle", max_detection_angle, DEFAULT_MAX_DETECTION_ANGLE);
+
+  get_laser_scan_subset(*msg,subset,min_detection_angle,max_detection_angle);
+
+  //Get laser scan points in /base_link frame  
+  try{
+    listener->waitForTransform("/base_link", msg->header.frame_id.c_str(), ros::Time(0), ros::Duration(1.0));
+    projector.transformLaserScanToPointCloud("/base_link", subset, cloud, *listener);
+  }
+  catch(tf::TransformException &ex){
+    ROS_ERROR("%s", ex.what());
+    return;
+  }
   
   
-  //Extract points between min_detection_angle and max_detection_angle
-  int min_detection_point= std::abs(msg->angle_min - min_detection_angle) / msg->angle_increment;
-  int max_detection_point= msg->ranges.size() - std::abs(msg->angle_max - max_detection_angle) / msg->angle_increment;
   
   //Get nearest point (nearest Obastacle) and its distance
-  auto obstaclePosition = cloud.points[min_detection_point];
-  float obstacleDistance = msg->ranges[min_detection_point];
-  for(int i = min_detection_point;i<max_detection_point;i++){
-    if(msg->ranges[i]<obstacleDistance){
-      obstaclePosition = cloud.points[i];
-      obstacleDistance = msg->ranges[i];
+  auto obstaclePosition = cloud.points[0]; //Assigns right type for auto
+  float obstacleDistance = subset.range_max+1; //One more of the biggest possible number
+  for(int i = 0;i<cloud.points.size();i++){
+    auto newPosition= cloud.points[i];
+    float newDistance = sqrt(newPosition.x*newPosition.x+newPosition.y*newPosition.y);
+    if(newDistance<obstacleDistance && newDistance > subset.range_min && newDistance < subset.range_max){
+      obstaclePosition = newPosition;
+      obstacleDistance = newDistance;
     }
 
   }
